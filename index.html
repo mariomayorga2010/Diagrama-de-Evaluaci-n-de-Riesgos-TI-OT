@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BPMN Interactivo: Riesgos de Terceros GMXT</title>
+    <style>
+        :root {
+            --bg-body: #f8fafc;
+            --gmxt-color: #2563eb;
+            --prov-color: #8b5cf6;
+            --gateway-color: #d97706;
+            --event-color: #334155;
+            --line-color: #94a3b8;
+            --text-dark: #0f172a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { background-color: var(--bg-body); padding: 0; color: var(--text-dark); }
+
+        header { text-align: center; padding: 2rem 1rem 1rem 1rem; }
+        header h1 { font-size: 2rem; color: var(--event-color); }
+
+        /* Controles Flotantes */
+        .controls { 
+            position: sticky; top: 0; background: rgba(248, 250, 252, 0.9); 
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            padding: 1rem; text-align: center; margin-bottom: 2rem; z-index: 100; 
+            border-bottom: 1px solid #cbd5e1; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            display: flex; justify-content: center; gap: 10px;
+        }
+        button {
+            background-color: var(--gmxt-color); color: white; border: none;
+            padding: 0.75rem 1.5rem; font-size: 1rem; border-radius: 6px; cursor: pointer;
+            font-weight: bold; transition: 0.2s;
+        }
+        button:hover { background-color: #1d4ed8; }
+        .btn-outline { background: transparent; color: var(--text-dark); border: 1px solid #94a3b8; }
+        .btn-outline:hover { background: #e2e8f0; }
+
+        /* Layout */
+        .bpmn-pool {
+            display: grid; grid-template-columns: 2fr 1fr; max-width: 1400px;
+            margin: 0 auto 4rem auto; background: white; border: 2px solid #cbd5e1;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); position: relative; 
+        }
+        .swimlane-header {
+            text-align: center; font-weight: bold; padding: 1rem; text-transform: uppercase; 
+            letter-spacing: 1px; color: white; position: relative; z-index: 2;
+        }
+        .header-gmxt { background-color: var(--gmxt-color); }
+        .header-prov { background-color: var(--prov-color); }
+        .swimlane-body { padding: 3rem 2rem; position: relative; z-index: 2; }
+        .column-gmxt { border-right: 2px dashed #cbd5e1; }
+
+        /* SVG */
+        #svg-lines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+
+        /* Nodos */
+        .flow-row { display: flex; align-items: flex-start; margin-bottom: 5rem; position: relative; }
+        .flow-center { flex: 1; display: flex; justify-content: center; align-items: center; }
+        .flow-right { flex: 1; display: flex; justify-content: flex-start; align-items: center; padding-left: 2rem; }
+        
+        .node-wrapper {
+            opacity: 0.2; transform: scale(0.95); transition: all 0.4s ease;
+            position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center;
+        }
+        .node-wrapper.active { opacity: 1; transform: scale(1); }
+
+        /* Simbología */
+        .bpmn-event {
+            width: 50px; height: 50px; border-radius: 50%; border: 2px solid var(--event-color); 
+            background: #f8fafc; display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; font-weight: bold;
+        }
+        .bpmn-event.end { border-width: 5px; }
+
+        /* Actividades Interactivas (Clicables) */
+        .bpmn-activity {
+            width: 220px; background: #f8fafc; border: 2px solid; border-radius: 10px;
+            padding: 1rem; text-align: center; font-size: 0.9rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); position: relative;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .bpmn-activity:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 12px rgba(0,0,0,0.1);
+            filter: brightness(0.95);
+        }
+        .bpmn-activity::after {
+            content: 'Ver detalles 👆'; display: block; font-size: 0.65rem; color: #64748b;
+            margin-top: 10px; font-weight: normal; opacity: 0; transition: opacity 0.2s;
+        }
+        .bpmn-activity:hover::after { opacity: 1; }
+        
+        .gmxt-act { border-color: var(--gmxt-color); }
+        .prov-act { border-color: var(--prov-color); }
+        .etapa-label { display: block; font-size: 0.7rem; font-weight: bold; color: #64748b; text-transform: uppercase; margin-bottom: 5px; }
+
+        /* Gateways y otros */
+        .bpmn-gateway-container { width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; position: relative; }
+        .bpmn-gateway-shape { position: absolute; width: 70px; height: 70px; background: #fef3c7; border: 3px solid var(--gateway-color); transform: rotate(45deg); }
+        .bpmn-gateway-text { position: relative; z-index: 2; font-size: 0.7rem; font-weight: bold; color: #92400e; text-align: center; line-height: 1.1; padding: 0 5px; }
+        .bpmn-mail { width: 180px; background: #e0f2fe; border: 2px dotted #0284c7; border-radius: 10px; padding: 0.8rem; text-align: center; font-size: 0.85rem; color: #0284c7; font-weight: bold; }
+        .spacer { height: 120px; }
+
+        /* --- Sistema de Modales --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        
+        .modal-box {
+            background: white; width: 90%; max-width: 500px; border-radius: 12px;
+            padding: 2rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+            transform: translateY(20px); transition: transform 0.3s; position: relative;
+        }
+        .modal-overlay.active .modal-box { transform: translateY(0); }
+        
+        .modal-close {
+            position: absolute; top: 15px; right: 20px; font-size: 1.5rem; color: #64748b;
+            cursor: pointer; border: none; background: transparent; transition: color 0.2s;
+        }
+        .modal-close:hover { color: #dc2626; }
+        
+        .modal-title { font-size: 1.25rem; color: var(--gmxt-color); margin-bottom: 1rem; padding-right: 20px; font-weight: bold;}
+        .modal-body { color: #334155; font-size: 0.95rem; line-height: 1.6; }
+        .modal-body ul { margin-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+        .modal-body li { margin-bottom: 0.4rem; }
+
+        @media (max-width: 1024px) {
+            .bpmn-pool { grid-template-columns: 1fr; }
+            .column-gmxt { border-right: none; border-bottom: 4px solid #cbd5e1; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Evaluación de Riesgos TI y OT</h1>
+        <p style="color: #64748b;">Haz clic en cada actividad para ver el detalle normativo.</p>
+    </header>
+
+    <div class="controls">
+        <button class="btn-outline" onclick="prevStep()" id="btn-prev">Paso Anterior</button>
+        <button onclick="nextStep()" id="btn-next">Siguiente Paso</button>
+        <button class="btn-outline" onclick="resetFlow()">Reiniciar</button>
+    </div>
+
+    <div class="bpmn-pool" id="pool">
+        <svg id="svg-lines">
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" /></marker>
+                <marker id="arrowhead-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#dc2626" /></marker>
+            </defs>
+        </svg>
+
+        <div class="swimlane-body column-gmxt">
+            <div class="swimlane-header header-gmxt" style="margin: -3rem -2rem 3rem -2rem;">GMXT (Evaluador)</div>
+
+            <div class="flow-row">
+                <div class="flow-center"><div class="node-wrapper" id="n-inicio"><div class="bpmn-event">Inicio</div></div></div>
+            </div>
+
+            <div class="flow-row">
+                <div class="flow-center">
+                    <div class="node-wrapper" id="n-analisis">
+                        <div class="bpmn-activity gmxt-act" data-modal="analisis">
+                            <span class="etapa-label">Etapa 1</span><strong>Análisis y Ponderación</strong><br>Evaluar si es Crítico.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flow-row">
+                <div class="flow-center">
+                    <div class="node-wrapper" id="n-gw1">
+                        <div class="bpmn-gateway-container"><div class="bpmn-gateway-shape"></div><div class="bpmn-gateway-text">¿Es Crítico?</div></div>
+                    </div>
+                </div>
+                <div class="flow-right">
+                    <div class="node-wrapper" id="n-gw1-no" style="margin-right: 20px;">
+                        <div class="bpmn-activity gmxt-act" data-modal="dashboard" style="border-color:#64748b; background:#f1f5f9;">
+                            <span class="etapa-label">Dashboard</span>Documentar datos (Sin evaluación).
+                        </div>
+                    </div>
+                    <div class="node-wrapper" id="n-fin1"><div class="bpmn-event end">Fin</div></div>
+                </div>
+            </div>
+
+            <div class="flow-row">
+                <div class="flow-center">
+                    <div class="node-wrapper" id="n-notifica">
+                        <div class="bpmn-activity gmxt-act" data-modal="notificacion">
+                            <span class="etapa-label">Etapa 1</span><strong>Notificar al Proveedor</strong><br>Enviar cuestionario (5 días).
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="spacer"></div>
+
+            <div class="flow-row">
+                <div class="flow-center">
+                    <div class="node-wrapper" id="n-revisar1">
+                        <div class="bpmn-activity gmxt-act" data-modal="revision1">
+                            <span class="etapa-label">Etapa 3</span><strong>Revisión de Evidencias</strong><br>Vaciar en Resultados_Dashboard.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flow-row">
+                <div class="flow-center">
+                    <div class="node-wrapper" id="n-gw2">
+                        <div class="bpmn-gateway-container"><div class="bpmn-gateway-shape"></div><div class="bpmn-gateway-text">¿>= 80% y DRP?</div></div>
+                    </div>
+                </div>
+                <div class="flow-right" style="flex-direction: column; align-items: flex-start; gap: 20px;">
+                    <div class="node-wrapper" id="n-mail-interna"><div class="bpmn-mail">Notificación Interna<br><span style="font-size:0.7rem;">Alerta: Faltan evidencias</span></div></div>
+                    <div class="node-wrapper" id="n-solicitar">
+                        <div class="bpmn-activity gmxt-act" data-modal="solicitud">
+                            <span class="etapa-label">Etapa 4</span><strong>Solicitar Complementos</strong><br>Dar nueva fecha límite (3 días).
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flow-row" style="margin-top: -3rem;">
+                <div class="flow-center"><div class="node-wrapper" id="n-fin-ok1"><div class="bpmn-event end" style="border-color:#059669;">Aprobado</div></div></div>
+            </div>
+
+            <div class="spacer"></div>
+
+            <div class="flow-row">
+                <div class="flow-center">
+                    <div class="node-wrapper" id="n-revisar2">
+                        <div class="bpmn-activity gmxt-act" data-modal="revision2">
+                            <span class="etapa-label">Etapa 4</span><strong>Segunda Revisión</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flow-row">
+                <div class="flow-center">
+                    <div class="node-wrapper" id="n-gw3">
+                        <div class="bpmn-gateway-container"><div class="bpmn-gateway-shape"></div><div class="bpmn-gateway-text">¿>= 80% en 2da?</div></div>
+                    </div>
+                </div>
+                <div class="flow-right">
+                    <div class="node-wrapper" id="n-descartar" style="margin-right: 20px;">
+                        <div class="bpmn-activity gmxt-act" data-modal="descarte" style="border-color:#dc2626; background:#fef2f2;">
+                            <strong>Descartar</strong> para próximos servicios.
+                        </div>
+                    </div>
+                    <div class="node-wrapper" id="n-fin-bad"><div class="bpmn-event end" style="border-color:#dc2626;">Fin</div></div>
+                </div>
+            </div>
+            
+            <div class="flow-row" style="margin-top: -3rem;">
+                <div class="flow-center"><div class="node-wrapper" id="n-fin-ok2"><div class="bpmn-event end" style="border-color:#059669;">Aprobado</div></div></div>
+            </div>
+        </div>
+
+        <div class="swimlane-body column-prov">
+            <div class="swimlane-header header-prov" style="margin: -3rem -2rem 3rem -2rem;">Proveedor Externo</div>
+            
+            <div style="height: 330px;"></div>
+
+            <div class="flow-row">
+                <div class="flow-center">
+                    <div class="node-wrapper" id="n-prov-llena">
+                        <div class="bpmn-activity prov-act" data-modal="cuestionario">
+                            <span class="etapa-label">Etapa 2</span><strong>Llenar Cuestionario</strong><br>Enviar respuestas y evidencias.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="height: 360px;"></div>
+
+            <div class="flow-row">
+                <div class="flow-center">
+                    <div class="node-wrapper" id="n-prov-subsana">
+                        <div class="bpmn-activity prov-act" data-modal="subsana">
+                            <span class="etapa-label">Etapa 4</span><strong>Subsanar Evidencias</strong><br>Enviar información faltante.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="info-modal" onclick="closeModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <button class="modal-close" onclick="closeModal(event)">&times;</button>
+            <h2 class="modal-title" id="modal-title">Título</h2>
+            <div class="modal-body" id="modal-body">Contenido...</div>
+        </div>
+    </div>
+
+    <script>
+        // --- BASE DE DATOS DE CONTENIDO PARA MODALES ---
+        const modalData = {
+            "analisis": {
+                title: "Análisis y Ponderación",
+                body: "Se le considera a un tercero crítico porque proporciona un servicio esencial (a nivel de cuentas o accesos), maneja información sensible (inclusive la consultoría)o impacta en sistemas core. <br><br>Se determinará por: <ul><li>Tipo de Servicio.</li><li>Conexión a la Red de Ferromex.</li><li>Uso de VPN.</li><li>Multifactor de Autenticación.</li><li>Análisis por Probabilidad e Impacto (dominios de Operación, Información y Usuario).</li></ul>"
+            },
+            "dashboard": {
+                title: "Documentación Básica en Dashboard",
+                body: "En caso de que un proveedor NO se considere como crítico derivado del análisis de Ponderación de Riesgos:<ul><li>Solo se documentarán sus datos de contacto.</li><li>Se registrará la información y alcance del servicio en el Dashboard de Terceros.</li><li><strong>No será acreedor a evaluación profunda.</strong></li></ul>"
+            },
+            "notificacion": {
+                title: "Notificación al Proveedor",
+                body: "<ul><li>Se notificará al proveedor a través de correo electrónico.</li><li>Se señalará que el tiempo requerido para compartir los datos es de <strong>5 días hábiles</strong>.</li><li><strong>Seguimiento:</strong> Se debe hacer un seguimiento diario a través de recordatorios vía correo hasta el 4º día previo a la fecha límite.</li></ul>"
+            },
+            "cuestionario": {
+                title: "Llenado de Cuestionario y Evidencias",
+                body: "Una vez notificado, el proveedor deberá:<ul><li>Llenar el cuestionario correspondiente.</li><li>Enviar la información con las evidencias necesarias (pantallazos, links, descripción de políticas y procedimientos y documentación) para validar su nivel de Riesgo.</li></ul>"
+            },
+            "revision1": {
+                title: "Primera Revisión de Evidencias",
+                body: "Acciones por parte del evaluador GMXT:<ul><li>Revisar y cotejar la información enviada con las evidencias que respalden las respuestas.</li><li>Vaciar la información a la hoja correspondiente en el archivo <code>Resultados_Dashboard.xlsx</code>.</li><li><strong>Validación crítica:</strong> Cumplir con una calificación mínima del 80% y contar con la documentación solicitada a Ciberseguridad (DRP y Plan de Continuidad del Negocio).</li></ul>"
+            },
+            "solicitud": {
+                title: "Solicitud de Información Complementaria",
+                body: "En caso de que las evidencias y respuestas de los proveedores críticos no cumplan con lo requerido:<ul><li>Se le solicitará nuevamente la información.</li><li>Se otorgará una nueva fecha límite estricta de <strong>3 días hábiles</strong> a partir del momento en que sea notificado.</li></ul>"
+            },
+            "subsana": {
+                title: "Subsanación por parte del Proveedor",
+                body: "El proveedor crítico está obligado a:<ul><li>Subsanar las deficiencias detectadas en la primera revisión.</li><li>Asegurar el cumplimiento del DRP (Disaster Recovery Plan) y el BCP (Business Continuity Plan).</li><li>Entregar los faltantes dentro de la nueva ventana de 3 días hábiles.</li></ul>"
+            },
+            "revision2": {
+                title: "Segunda Revisión",
+                body: "<ul><li>GMXT evalúa exclusivamente las correcciones y documentos faltantes enviados en la segunda ventana de tiempo.</li><li>Se recalcula la calificación final de riesgo para determinar si aprueba los criterios mínimos de ciberseguridad.</li></ul>"
+            },
+            "descarte": {
+                title: "Descarte de Proveedor",
+                body: "Condiciones de fallo definitivo:<ul><li>Sí el proveedor obtiene <strong>menos del 80% de calificación</strong> en la segunda revisión.</li><li>Sí por ende el mapa de calor lo sigue marcando como de alto riesgo.</li><li><strong>Acción:</strong> Podrá ser descartado para próximos servicios con la empresa.</li></ul>"
+            }
+        };
+
+        // --- LÓGICA DE MODALES ---
+        const modalOverlay = document.getElementById('info-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalBody = document.getElementById('modal-body');
+
+        // Asignar eventos click a todas las actividades con atributo data-modal
+        document.querySelectorAll('.bpmn-activity[data-modal]').forEach(el => {
+            el.addEventListener('click', function() {
+                const key = this.getAttribute('data-modal');
+                if(modalData[key]) {
+                    modalTitle.innerHTML = modalData[key].title;
+                    modalBody.innerHTML = modalData[key].body;
+                    modalOverlay.classList.add('active');
+                }
+            });
+        });
+
+        function closeModal(e) {
+            if(e) e.preventDefault();
+            modalOverlay.classList.remove('active');
+        }
+
+        // --- LÓGICA DEL DIAGRAMA Y LÍNEAS SVG ---
+        const connections = [
+            {from: 'n-inicio', to: 'n-analisis', type: 'down'},
+            {from: 'n-analisis', to: 'n-gw1', type: 'down'},
+            {from: 'n-gw1', to: 'n-gw1-no', type: 'right', label: 'NO'},
+            {from: 'n-gw1-no', to: 'n-fin1', type: 'right'},
+            {from: 'n-gw1', to: 'n-notifica', type: 'down', label: 'SÍ'},
+            {from: 'n-notifica', to: 'n-prov-llena', type: 'cross-down'},
+            {from: 'n-prov-llena', to: 'n-revisar1', type: 'cross-down'},
+            {from: 'n-revisar1', to: 'n-gw2', type: 'down'},
+            {from: 'n-gw2', to: 'n-fin-ok1', type: 'down', label: 'SÍ'},
+            {from: 'n-gw2', to: 'n-mail-interna', type: 'right', label: 'NO'},
+            {from: 'n-mail-interna', to: 'n-solicitar', type: 'down'},
+            {from: 'n-solicitar', to: 'n-prov-subsana', type: 'cross-down'},
+            {from: 'n-prov-subsana', to: 'n-revisar2', type: 'cross-down'},
+            {from: 'n-revisar2', to: 'n-gw3', type: 'down'},
+            {from: 'n-gw3', to: 'n-fin-ok2', type: 'down', label: 'SÍ'},
+            {from: 'n-gw3', to: 'n-descartar', type: 'right', label: 'NO', color: '#dc2626'},
+            {from: 'n-descartar', to: 'n-fin-bad', type: 'right', color: '#dc2626'}
+        ];
+
+        const sequence = [
+            ['n-inicio', 'n-analisis'], 
+            ['n-gw1'],
+            ['n-gw1-no', 'n-fin1', 'n-notifica'], 
+            ['n-prov-llena'],
+            ['n-revisar1', 'n-gw2'],
+            ['n-fin-ok1', 'n-mail-interna', 'n-solicitar'], 
+            ['n-prov-subsana'], 
+            ['n-revisar2', 'n-gw3'],
+            ['n-fin-ok2', 'n-descartar', 'n-fin-bad'] 
+        ];
+
+        let currentIdx = -1;
+        const svgContainer = document.getElementById('svg-lines');
+
+        function drawLines() {
+            svgContainer.innerHTML = svgContainer.querySelector('defs').outerHTML; 
+            
+            connections.forEach(conn => {
+                const el1 = document.getElementById(conn.from);
+                const el2 = document.getElementById(conn.to);
+                
+                if (!el1.classList.contains('active') || !el2.classList.contains('active')) return;
+
+                const rect1 = el1.getBoundingClientRect();
+                const rect2 = el2.getBoundingClientRect();
+                const poolRect = document.getElementById('pool').getBoundingClientRect();
+
+                const p1 = { x: rect1.left - poolRect.left + rect1.width/2, y: rect1.top - poolRect.top + rect1.height/2 };
+                const p2 = { x: rect2.left - poolRect.left + rect2.width/2, y: rect2.top - poolRect.top + rect2.height/2 };
+                
+                let pathD = '';
+                const color = conn.color || '#94a3b8';
+                const marker = conn.color === '#dc2626' ? 'url(#arrowhead-red)' : 'url(#arrowhead)';
+
+                if (conn.type === 'down') {
+                    p1.y = rect1.bottom - poolRect.top;
+                    p2.y = rect2.top - poolRect.top - 5;
+                    pathD = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
+                } else if (conn.type === 'right') {
+                    p1.x = rect1.right - poolRect.left;
+                    p2.x = rect2.left - poolRect.left - 5;
+                    pathD = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
+                } else if (conn.type === 'cross-down') {
+                    p1.y = rect1.bottom - poolRect.top;
+                    p2.y = rect2.top - poolRect.top - 5;
+                    pathD = `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y + 50}, ${p2.x} ${p2.y - 50}, ${p2.x} ${p2.y}`;
+                }
+
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                path.setAttribute("d", pathD);
+                path.setAttribute("stroke", color);
+                path.setAttribute("stroke-width", "3");
+                path.setAttribute("fill", "none");
+                path.setAttribute("marker-end", marker);
+                svgContainer.appendChild(path);
+
+                if (conn.label) {
+                    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    text.setAttribute("fill", color);
+                    text.setAttribute("font-size", "12");
+                    text.setAttribute("font-weight", "bold");
+                    text.textContent = conn.label;
+                    if (conn.type === 'down') {
+                        text.setAttribute("x", p1.x + 10); text.setAttribute("y", p1.y + 20);
+                    } else if (conn.type === 'right') {
+                        text.setAttribute("x", p1.x + 10); text.setAttribute("y", p1.y - 10);
+                    }
+                    svgContainer.appendChild(text);
+                }
+            });
+        }
+
+        function updateNodesState() {
+            document.querySelectorAll('.node-wrapper').forEach(n => n.classList.remove('active'));
+            for (let i = 0; i <= currentIdx; i++) {
+                sequence[i].forEach(id => document.getElementById(id).classList.add('active'));
+            }
+            drawLines();
+        }
+
+        function nextStep() {
+            if (currentIdx < sequence.length - 1) {
+                currentIdx++;
+                updateNodesState();
+                const lastId = sequence[currentIdx][sequence[currentIdx].length - 1];
+                document.getElementById(lastId).scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function prevStep() {
+            if (currentIdx > 0) {
+                currentIdx--;
+                updateNodesState();
+                const lastId = sequence[currentIdx][sequence[currentIdx].length - 1];
+                document.getElementById(lastId).scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function resetFlow() {
+            currentIdx = -1;
+            updateNodesState();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            nextStep(); 
+        }
+
+        window.addEventListener('resize', drawLines);
+        window.onload = () => nextStep();
+    </script>
+</body>
+</html>
