@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BPMN Multiactor: Whitelist Ferromex</title>
+    <style>
+        :root {
+            --bg-body: #f8fafc;
+            --prov-color: #64748b;     /* Slate - Solicitante */
+            --mesa-color: #0ea5e9;     /* Sky Blue - Mesa de Ayuda */
+            --infra-color: #2563eb;    /* Blue - Infraestructura */
+            --seg-color: #9333ea;      /* Purple - Seguridad Digital */
+            --riesgos-color: #ea580c;  /* Orange - Riesgos TI */
+            
+            --gateway-color: #d97706;
+            --event-color: #334155;
+            --text-dark: #0f172a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { background-color: var(--bg-body); padding: 0; color: var(--text-dark); overflow-y: scroll; }
+
+        header { text-align: center; padding: 2rem 1rem 1rem 1rem; }
+        header h1 { font-size: 2rem; color: var(--event-color); }
+
+        /* Controles Flotantes */
+        .controls { 
+            position: sticky; top: 0; background: rgba(248, 250, 252, 0.9); 
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            padding: 1rem; text-align: center; margin-bottom: 2rem; z-index: 100; 
+            border-bottom: 1px solid #cbd5e1; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            display: flex; justify-content: center; gap: 10px;
+        }
+        button {
+            background-color: var(--infra-color); color: white; border: none;
+            padding: 0.75rem 1.5rem; font-size: 1rem; border-radius: 6px; cursor: pointer;
+            font-weight: bold; transition: 0.2s;
+        }
+        button:hover { filter: brightness(1.1); }
+        .btn-outline { background: transparent; color: var(--text-dark); border: 1px solid #94a3b8; }
+        .btn-outline:hover { background: #e2e8f0; }
+
+        /* Layout Grid Multiactor */
+        .pool-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            padding: 0 2rem 4rem 2rem;
+        }
+
+        .bpmn-pool {
+            display: grid; 
+            grid-template-columns: repeat(5, 1fr);
+            grid-auto-rows: minmax(130px, auto);
+            min-width: 1400px; /* Previene que se aplaste en pantallas pequeñas */
+            margin: 0 auto; 
+            background: white; border: 2px solid #cbd5e1;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); 
+            position: relative; 
+        }
+
+        /* Fondos de carriles (Swimlanes) */
+        .swimlane-bg { position: absolute; top: 0; bottom: 0; border-right: 2px dashed #cbd5e1; z-index: 0; }
+        .bg-col-1 { left: 0%; width: 20%; }
+        .bg-col-2 { left: 20%; width: 20%; }
+        .bg-col-3 { left: 40%; width: 20%; }
+        .bg-col-4 { left: 60%; width: 20%; }
+        .bg-col-5 { left: 80%; width: 20%; border-right: none; }
+
+        /* Celdas del Grid */
+        .grid-cell { display: flex; justify-content: center; align-items: center; position: relative; z-index: 2; padding: 1rem; }
+        
+        /* Posicionamiento en Grid */
+        .g-col-1 { grid-column: 1; } .g-col-2 { grid-column: 2; } .g-col-3 { grid-column: 3; } .g-col-4 { grid-column: 4; } .g-col-5 { grid-column: 5; }
+        .g-row-1 { grid-row: 1; align-items: stretch; padding: 0;} /* Headers */
+        .g-row-2 { grid-row: 2; } .g-row-3 { grid-row: 3; } .g-row-4 { grid-row: 4; }
+        .g-row-5 { grid-row: 5; } .g-row-6 { grid-row: 6; } .g-row-7 { grid-row: 7; }
+        .g-row-8 { grid-row: 8; } .g-row-9 { grid-row: 9; } .g-row-10 { grid-row: 10; }
+        .g-row-11 { grid-row: 11; }
+
+        .swimlane-header {
+            width: 100%; text-align: center; font-weight: bold; padding: 1.5rem 1rem; 
+            text-transform: uppercase; letter-spacing: 1px; color: white;
+            display: flex; align-items: center; justify-content: center;
+            border-bottom: 2px solid #cbd5e1;
+        }
+
+        /* Nodos y Actividades */
+        #svg-lines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+        
+        .node-wrapper {
+            opacity: 0.2; transform: scale(0.95); transition: all 0.4s ease;
+            display: flex; flex-direction: column; align-items: center; width: 100%;
+        }
+        .node-wrapper.active { opacity: 1; transform: scale(1); }
+
+        .bpmn-event {
+            width: 50px; height: 50px; border-radius: 50%; border: 2px solid var(--event-color); 
+            background: #f8fafc; display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; font-weight: bold;
+        }
+        .bpmn-event.end { border-width: 5px; }
+
+        .bpmn-activity {
+            width: 100%; max-width: 220px; background: #f8fafc; border: 2px solid; border-radius: 10px;
+            padding: 1.2rem 1rem; text-align: center; font-size: 0.85rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); position: relative;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .bpmn-activity:hover { transform: translateY(-3px); box-shadow: 0 8px 12px rgba(0,0,0,0.1); filter: brightness(0.95); }
+        .bpmn-activity::after {
+            content: 'Ver normativa 👆'; display: block; font-size: 0.65rem; color: #64748b;
+            margin-top: 10px; font-weight: normal; opacity: 0; transition: opacity 0.2s;
+        }
+        .bpmn-activity:hover::after { opacity: 1; }
+        
+        /* Colores de bordes por actor */
+        .prov-act { border-color: var(--prov-color); }
+        .mesa-act { border-color: var(--mesa-color); }
+        .infra-act { border-color: var(--infra-color); }
+        .seg-act { border-color: var(--seg-color); }
+        .riesgos-act { border-color: var(--riesgos-color); }
+        
+        .etapa-label { display: block; font-size: 0.7rem; font-weight: bold; color: #64748b; text-transform: uppercase; margin-bottom: 5px; }
+
+        /* Gateways */
+        .bpmn-gateway-container { width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; position: relative; }
+        .bpmn-gateway-shape { position: absolute; width: 70px; height: 70px; background: #fef3c7; border: 3px solid var(--gateway-color); transform: rotate(45deg); }
+        .bpmn-gateway-text { position: relative; z-index: 2; font-size: 0.7rem; font-weight: bold; color: #92400e; text-align: center; line-height: 1.1; padding: 0 5px; }
+
+        /* Sistema de Modales */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-box {
+            background: white; width: 90%; max-width: 500px; border-radius: 12px;
+            padding: 2rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+            transform: translateY(20px); transition: transform 0.3s; position: relative;
+        }
+        .modal-overlay.active .modal-box { transform: translateY(0); }
+        .modal-close {
+            position: absolute; top: 15px; right: 20px; font-size: 1.5rem; color: #64748b;
+            cursor: pointer; border: none; background: transparent; transition: color 0.2s;
+        }
+        .modal-close:hover { color: #dc2626; }
+        .modal-title { font-size: 1.25rem; color: var(--infra-color); margin-bottom: 1rem; padding-right: 20px; font-weight: bold;}
+        .modal-body { color: #334155; font-size: 0.95rem; line-height: 1.6; }
+        .modal-body ul { margin-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+        .modal-body li { margin-bottom: 0.4rem; }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Altas, Bajas y Cambios (Whitelist)</h1>
+        <p style="color: #64748b;">Desglose Multiactor: Responsabilidades Técnicas y de Seguridad</p>
+    </header>
+
+    <div class="controls">
+        <button class="btn-outline" onclick="prevStep()" id="btn-prev">Paso Anterior</button>
+        <button onclick="nextStep()" id="btn-next">Siguiente Paso</button>
+        <button class="btn-outline" onclick="resetFlow()">Reiniciar</button>
+    </div>
+
+    <div class="pool-wrapper">
+        <div class="bpmn-pool" id="pool">
+            <svg id="svg-lines">
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" /></marker>
+                    <marker id="arrowhead-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#dc2626" /></marker>
+                    <marker id="arrowhead-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#059669" /></marker>
+                </defs>
+            </svg>
+
+            <!-- Fondos Visuales Columnas -->
+            <div class="swimlane-bg bg-col-1"></div>
+            <div class="swimlane-bg bg-col-2"></div>
+            <div class="swimlane-bg bg-col-3"></div>
+            <div class="swimlane-bg bg-col-4"></div>
+            <div class="swimlane-bg bg-col-5"></div>
+
+            <!-- ROW 1: Headers (Actores) -->
+            <div class="grid-cell g-col-1 g-row-1"><div class="swimlane-header" style="background: var(--prov-color)">Solicitante</div></div>
+            <div class="grid-cell g-col-2 g-row-1"><div class="swimlane-header" style="background: var(--mesa-color)">Mesa de Ayuda</div></div>
+            <div class="grid-cell g-col-3 g-row-1"><div class="swimlane-header" style="background: var(--infra-color)">Gcia. Infraestructura</div></div>
+            <div class="grid-cell g-col-4 g-row-1"><div class="swimlane-header" style="background: var(--seg-color)">Seguridad Digital</div></div>
+            <div class="grid-cell g-col-5 g-row-1"><div class="swimlane-header" style="background: var(--riesgos-color)">Gcia. de Riesgos TI</div></div>
+
+            <!-- Nodos Lógicos -->
+            <div class="grid-cell g-col-1 g-row-2">
+                <div class="node-wrapper" id="n-inicio"><div class="bpmn-event">Inicio</div></div>
+            </div>
+
+            <div class="grid-cell g-col-1 g-row-3">
+                <div class="node-wrapper" id="n-reqs">
+                    <div class="bpmn-activity prov-act" data-modal="reqs">
+                        <span class="etapa-label">Paso 1</span><strong>Preparar Justificación</strong><br>Alta, Baja o Modificación.
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-cell g-col-2 g-row-4">
+                <div class="node-wrapper" id="n-ticket">
+                    <div class="bpmn-activity mesa-act" data-modal="ticket">
+                        <span class="etapa-label">Paso 2</span><strong>Registro Oficial</strong><br>Generar Ticket en sistema.
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-cell g-col-3 g-row-5">
+                <div class="node-wrapper" id="n-val-infra">
+                    <div class="bpmn-activity infra-act" data-modal="val-infra">
+                        <span class="etapa-label">Paso 3</span><strong>Validación Técnica</strong><br>Viabilidad e impacto en correo.
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-cell g-col-4 g-row-6">
+                <div class="node-wrapper" id="n-val-seg">
+                    <div class="bpmn-activity seg-act" data-modal="val-seg">
+                        <span class="etapa-label">Paso 4</span><strong>Validación de Seguridad</strong><br>Reputación y riesgos (BEC).
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-cell g-col-5 g-row-7">
+                <div class="node-wrapper" id="n-val-riesgos">
+                    <div class="bpmn-activity riesgos-act" data-modal="val-riesgos">
+                        <span class="etapa-label">Paso 5</span><strong>Validación de Riesgos</strong><br>Alineación con apetito de riesgo.
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-cell g-col-5 g-row-8">
+                <div class="node-wrapper" id="n-gw1">
+                    <div class="bpmn-gateway-container"><div class="bpmn-gateway-shape"></div><div class="bpmn-gateway-text">¿Aprobado<br>por todos?</div></div>
+                </div>
+            </div>
+
+            <div class="grid-cell g-col-3 g-row-9">
+                <div class="node-wrapper" id="n-implementa">
+                    <div class="bpmn-activity infra-act" data-modal="implementa">
+                        <span class="etapa-label">Ejecución</span><strong>Implementación</strong><br>Configuración de Whitelist.
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-cell g-col-2 g-row-9">
+                <div class="node-wrapper" id="n-rechazo">
+                    <div class="bpmn-activity mesa-act" data-modal="rechazo" style="border-color:#dc2626; background:#fef2f2;">
+                        <strong>Solicitud Rechazada</strong><br>Se notifica al usuario.
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-cell g-col-2 g-row-10">
+                <div class="node-wrapper" id="n-control">
+                    <div class="bpmn-activity mesa-act" data-modal="control">
+                        <span class="etapa-label">Documentación</span><strong>Control y Trazabilidad</strong><br>Cierre de ticket.
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-cell g-col-1 g-row-10">
+                <div class="node-wrapper" id="n-fin-bad"><div class="bpmn-event end" style="border-color:#dc2626;">Fin</div></div>
+            </div>
+
+            <div class="grid-cell g-col-2 g-row-11">
+                <div class="node-wrapper" id="n-fin-ok"><div class="bpmn-event end" style="border-color:#059669;">OK</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="info-modal" onclick="closeModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <button class="modal-close" onclick="closeModal(event)">&times;</button>
+            <h2 class="modal-title" id="modal-title">Título</h2>
+            <div class="modal-body" id="modal-body">Contenido...</div>
+        </div>
+    </div>
+
+    <script>
+        // --- BASE DE DATOS DE MODALES ---
+        const modalData = {
+            "reqs": {
+                title: "Requisitos de la Solicitud (Usuario)",
+                body: "El solicitante debe preparar la información según el caso:<br><br><strong>Alta de dominio:</strong><ul><li>Justificación operativa.</li><li>Área/proceso que lo usará y tipo de relación.</li><li>Declaración expresa de que el dominio es confiable, legítimo y no generará vulnerabilidades o facilitará phishing.</li></ul><strong>Baja de dominio:</strong><ul><li>Indicar dominio, justificar baja y medir impacto.</li></ul><strong>Modificación:</strong><ul><li>Describir cambio, dominio actual y nuevo.</li></ul>"
+            },
+            "ticket": {
+                title: "Mesa de Ayuda (Registro)",
+                body: "Toda solicitud deberá:<ul><li>Ser registrada obligatoriamente generando un ticket.</li><li>Especificar el tipo (Alta, Baja o Modificación).</li><li><strong>Acción clave:</strong> Incluir en copia a los Gerentes de Infraestructura, Seguridad Digital y Riesgos Informáticos para detonar sus validaciones.</li></ul>"
+            },
+            "val-infra": {
+                title: "Gerencia de Infraestructura",
+                body: "El equipo técnico ejecuta su fase de evaluación:<ul><li>Evalúa la viabilidad técnica de la petición.</li><li>Determina el impacto que tendrá el alta/baja/cambio en las plataformas de correo electrónico operativas.</li></ul>"
+            },
+            "val-seg": {
+                title: "Gerencia de Seguridad Digital",
+                body: "Fase crítica de ciberseguridad:<ul><li>Evalúa los riesgos de seguridad asociados al dominio.</li><li>Verifica la reputación del dominio en las listas globales.</li><li>Analiza rigurosamente los posibles riesgos de phishing, fraude o suplantación BEC (Business Email Compromise).</li></ul>"
+            },
+            "val-riesgos": {
+                title: "Gerencia de Riesgos Informáticos",
+                body: "Fase de control y gobierno:<ul><li>Da seguimiento transversal a la solicitud.</li><li>Valida la alineación de la petición con el <strong>apetito de riesgo</strong> de la organización y el marco regulatorio corporativo.</li></ul>"
+            },
+            "rechazo": {
+                title: "Rechazo del Ticket",
+                body: "Si Infraestructura, Seguridad o Riesgos detectan una amenaza, vulnerabilidad o falta de justificación, la Mesa de Ayuda procede al rechazo y cierre del ticket, informando al solicitante."
+            },
+            "implementa": {
+                title: "Implementación (Infraestructura)",
+                body: "Una vez <strong>aprobada unánimemente</strong> la solicitud:<ul><li>La Gerencia de Infraestructura realiza la configuración técnica (DNS, Reglas).</li><li>Se actualizan formalmente las listas permitidas (Whitelist) en los servidores.</li><li>Infraestructura documenta el cambio completado en el ticket.</li></ul>"
+            },
+            "control": {
+                title: "Control y Trazabilidad (Mesa)",
+                body: "Fase de documentación y auditoría:<ul><li>Todas las solicitudes deberán quedar permanentemente registradas.</li><li>La Mesa de Ayuda se asegura de conservar la evidencia electrónica de: <strong>1. Solicitud, 2. Validaciones técnicas, 3. Aprobación y 4. Implementación final.</strong></li></ul>"
+            }
+        };
+
+        const modalOverlay = document.getElementById('info-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalBody = document.getElementById('modal-body');
+
+        document.querySelectorAll('.bpmn-activity[data-modal]').forEach(el => {
+            el.addEventListener('click', function() {
+                const key = this.getAttribute('data-modal');
+                if(modalData[key]) {
+                    modalTitle.innerHTML = modalData[key].title;
+                    modalBody.innerHTML = modalData[key].body;
+                    modalOverlay.classList.add('active');
+                }
+            });
+        });
+
+        function closeModal(e) { if(e) e.preventDefault(); modalOverlay.classList.remove('active'); }
+
+        // --- LÓGICA DE DIBUJADO SVG (GRID) ---
+        const connections = [
+            {from: 'n-inicio', to: 'n-reqs', type: 'down'},
+            {from: 'n-reqs', to: 'n-ticket', type: 'cross-down'},
+            {from: 'n-ticket', to: 'n-val-infra', type: 'cross-down'},
+            {from: 'n-val-infra', to: 'n-val-seg', type: 'cross-down'},
+            {from: 'n-val-seg', to: 'n-val-riesgos', type: 'cross-down'},
+            {from: 'n-val-riesgos', to: 'n-gw1', type: 'down'},
+            {from: 'n-gw1', to: 'n-implementa', type: 'cross-down', label: 'SÍ', color: '#059669'},
+            {from: 'n-gw1', to: 'n-rechazo', type: 'cross-down', label: 'NO', color: '#dc2626'},
+            {from: 'n-rechazo', to: 'n-fin-bad', type: 'cross-down', color: '#dc2626'},
+            {from: 'n-implementa', to: 'n-control', type: 'cross-down'},
+            {from: 'n-control', to: 'n-fin-ok', type: 'down'}
+        ];
+
+        const sequence = [
+            ['n-inicio', 'n-reqs'], 
+            ['n-ticket'],
+            ['n-val-infra'], 
+            ['n-val-seg'],
+            ['n-val-riesgos', 'n-gw1'],
+            ['n-implementa', 'n-rechazo'], 
+            ['n-control', 'n-fin-bad'],
+            ['n-fin-ok']
+        ];
+
+        let currentIdx = -1;
+        const svgContainer = document.getElementById('svg-lines');
+
+        function drawLines() {
+            svgContainer.innerHTML = svgContainer.querySelector('defs').outerHTML; 
+            
+            connections.forEach(conn => {
+                const el1 = document.getElementById(conn.from);
+                const el2 = document.getElementById(conn.to);
+                
+                if (!el1.classList.contains('active') || !el2.classList.contains('active')) return;
+
+                const rect1 = el1.getBoundingClientRect();
+                const rect2 = el2.getBoundingClientRect();
+                const poolRect = document.getElementById('pool').getBoundingClientRect();
+
+                const p1 = { x: rect1.left - poolRect.left + rect1.width/2, y: rect1.top - poolRect.top + rect1.height/2 };
+                const p2 = { x: rect2.left - poolRect.left + rect2.width/2, y: rect2.top - poolRect.top + rect2.height/2 };
+                
+                let pathD = '';
+                const color = conn.color || '#94a3b8';
+                let marker = 'url(#arrowhead)';
+                if(conn.color === '#dc2626') marker = 'url(#arrowhead-red)';
+                if(conn.color === '#059669') marker = 'url(#arrowhead-green)';
+
+                if (conn.type === 'down') {
+                    p1.y = rect1.bottom - poolRect.top; p2.y = rect2.top - poolRect.top - 5;
+                    pathD = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
+                } else if (conn.type === 'cross-down') {
+                    p1.y = rect1.bottom - poolRect.top; p2.y = rect2.top - poolRect.top - 5;
+                    // Curva de Bezier fluida para saltos entre columnas (tanto a la derecha como a la izquierda)
+                    pathD = `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y + 60}, ${p2.x} ${p2.y - 60}, ${p2.x} ${p2.y}`;
+                }
+
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                path.setAttribute("d", pathD); path.setAttribute("stroke", color); path.setAttribute("stroke-width", "3");
+                path.setAttribute("fill", "none"); path.setAttribute("marker-end", marker);
+                svgContainer.appendChild(path);
+
+                if (conn.label) {
+                    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    text.setAttribute("fill", color); text.setAttribute("font-size", "13"); text.setAttribute("font-weight", "bold");
+                    text.textContent = conn.label;
+                    
+                    // Cálculo matemático para poner el texto SÍ/NO en medio de la curva
+                    if (conn.type === 'down') {
+                        text.setAttribute("x", p1.x + 10); text.setAttribute("y", p1.y + 25);
+                    } else if (conn.type === 'cross-down') {
+                        text.setAttribute("x", p1.x + (p2.x - p1.x) * 0.5 + 10); 
+                        text.setAttribute("y", p1.y + (p2.y - p1.y) * 0.5);
+                    }
+                    svgContainer.appendChild(text);
+                }
+            });
+        }
+
+        function updateNodesState() {
+            document.querySelectorAll('.node-wrapper').forEach(n => n.classList.remove('active'));
+            for (let i = 0; i <= currentIdx; i++) {
+                sequence[i].forEach(id => document.getElementById(id).classList.add('active'));
+            }
+            drawLines();
+        }
+
+        function nextStep() {
+            if (currentIdx < sequence.length - 1) {
+                currentIdx++; updateNodesState();
+                const lastId = sequence[currentIdx][sequence[currentIdx].length - 1];
+                document.getElementById(lastId).scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function prevStep() {
+            if (currentIdx > 0) {
+                currentIdx--; updateNodesState();
+                const lastId = sequence[currentIdx][sequence[currentIdx].length - 1];
+                document.getElementById(lastId).scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function resetFlow() {
+            currentIdx = -1; updateNodesState();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            nextStep(); 
+        }
+
+        window.addEventListener('resize', drawLines);
+        window.onload = () => nextStep();
+    </script>
+</body>
+</html>
