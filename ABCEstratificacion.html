@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flujo BPMN 2.0 - Gestión de Dominios</title>
+    <style>
+        :root {
+            --primary: #0f172a;
+            --accent: #2563eb;
+            --bg-main: #f8fafc;
+            --border: #cbd5e1;
+            --lane-border: #e2e8f0;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            
+            /* Colores BPMN */
+            --bpmn-event: #10b981;
+            --bpmn-event-end: #ef4444;
+            --bpmn-task: #f8fafc;
+            --bpmn-task-border: #3b82f6;
+            --bpmn-gateway: #fffbeb;
+            --bpmn-gateway-border: #f59e0b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            background-color: var(--primary);
+            color: white;
+            padding: 15px 30px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            z-index: 20;
+        }
+
+        header h1 { font-size: 1.4rem; font-weight: 500; }
+        header p { color: #94a3b8; font-size: 0.85rem; margin-top: 4px; }
+
+        /* Contenedor del Diagrama */
+        .diagram-wrapper {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+            background: white;
+            padding-bottom: 100px;
+        }
+
+        .diagram-container {
+            position: relative;
+            min-width: 1400px;
+            /* Grid: Columna de actores + 9 columnas para pasos de flujo */
+            display: grid;
+            grid-template-columns: 200px repeat(9, 180px);
+            grid-auto-rows: minmax(110px, auto);
+            padding-right: 50px;
+        }
+
+        /* SVG para líneas conectoras */
+        #svg-layer {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        path.connector {
+            fill: none;
+            stroke: #94a3b8;
+            stroke-width: 2;
+            transition: stroke 0.3s, stroke-width 0.3s;
+        }
+
+        path.connector.active {
+            stroke: var(--accent);
+            stroke-width: 3;
+        }
+
+        /* Fases / Etapas (Milestones) */
+        .stage-header {
+            grid-row: 1;
+            background-color: #f1f5f9;
+            border-bottom: 2px solid var(--border);
+            border-left: 1px dashed var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 10px;
+        }
+
+        /* Carriles (Lanes) */
+        .lane-bg {
+            grid-column: 1 / -1;
+            border-bottom: 1px solid var(--lane-border);
+            z-index: 1;
+        }
+
+        .lane-title {
+            grid-column: 1;
+            background-color: #f8fafc;
+            border-right: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            font-weight: 600;
+            color: var(--primary);
+            font-size: 0.85rem;
+            z-index: 15;
+            position: sticky;
+            left: 0;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.02);
+        }
+
+        /* Nodos BPMN */
+        .bpmn-node {
+            position: relative;
+            z-index: 20;
+            margin: auto;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            line-height: 1.2;
+            color: var(--text-main);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            opacity: 0.5;
+            transform: scale(0.95);
+        }
+
+        .bpmn-node:hover {
+            transform: translateY(-2px) scale(0.98);
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+            opacity: 0.8;
+        }
+
+        .bpmn-node.active, .bpmn-node.completed {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .bpmn-node.active {
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+        }
+
+        /* Formas específicas BPMN */
+        .shape-event {
+            width: 50px; height: 50px;
+            border-radius: 50%;
+            background: white;
+            border: 3px solid var(--bpmn-event);
+        }
+        
+        .shape-event.end { border-color: var(--bpmn-event-end); border-width: 4px; }
+
+        .shape-task {
+            width: 130px; height: 70px;
+            background-color: var(--bpmn-task);
+            border: 2px solid var(--bpmn-task-border);
+            border-radius: 8px;
+            padding: 5px;
+        }
+
+        .shape-gateway {
+            width: 70px; height: 70px;
+            background-color: var(--bpmn-gateway);
+            border: 2px solid var(--bpmn-gateway-border);
+            transform: rotate(45deg) scale(0.95);
+            /* Contenedor interno para contrarrestar la rotación del texto */
+            display: flex; align-items: center; justify-content: center;
+        }
+        .shape-gateway > span { transform: rotate(-45deg); display: block; width: 80px; }
+
+        /* Controles Fijos */
+        .controls {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px 30px;
+            border-top: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 100;
+        }
+
+        button {
+            padding: 10px 24px; border: none; border-radius: 6px;
+            font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+        }
+        button:active { transform: scale(0.96); }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+        .btn-secondary { background: #e2e8f0; color: var(--text-main); }
+        .btn-secondary:hover:not(:disabled) { background: #cbd5e1; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 1000; opacity: 0; pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-content {
+            background: white; width: 90%; max-width: 450px;
+            border-radius: 12px; padding: 25px;
+            transform: translateY(20px); transition: transform 0.3s;
+            position: relative;
+        }
+        .modal-overlay.active .modal-content { transform: translateY(0); }
+        .modal-close {
+            position: absolute; top: 15px; right: 20px;
+            background: none; border: none; font-size: 1.5rem;
+            cursor: pointer; color: var(--text-muted);
+        }
+        .modal-meta {
+            background: var(--bg-main); padding: 12px; border-radius: 6px;
+            margin-bottom: 15px; font-size: 0.85rem; border: 1px solid var(--border);
+        }
+        .modal-body { font-size: 0.95rem; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Procedimiento BPMN: Altas, Bajas y Cambios de Whitelist</h1>
+        <p>Arquitectura orientada a procesos (Sección 6.1 Ferromex)</p>
+    </header>
+
+    <div class="diagram-wrapper" id="diagram-wrapper">
+        <div class="diagram-container" id="diagram-container">
+            <svg id="svg-layer">
+                <defs>
+                    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" id="arrow-path"/>
+                    </marker>
+                    <marker id="arrow-active" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+                    </marker>
+                </defs>
+            </svg>
+            <!-- Renderizado dinámico -->
+        </div>
+    </div>
+
+    <div class="controls">
+        <div id="progress-text" style="font-weight: 600; color: var(--accent);">Inicio del Flujo</div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn-secondary" id="btn-prev" disabled>Atrás</button>
+            <button class="btn-secondary" id="btn-reset">Reiniciar</button>
+            <button class="btn-primary" id="btn-next">Avanzar Flujo</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+            <h2 id="modal-title" style="margin-bottom: 15px; font-size: 1.2rem; padding-right: 20px;"></h2>
+            <div class="modal-meta">
+                <div><strong>Responsable:</strong> <span id="modal-lane"></span></div>
+                <div style="margin-top: 5px;"><strong>Fase:</strong> <span id="modal-stage"></span></div>
+            </div>
+            <div id="modal-body" class="modal-body"></div>
+        </div>
+    </div>
+
+    <script>
+        const lanes = [
+            { id: 2, name: "Solicitante" },
+            { id: 3, name: "Mesa de Ayuda (Sistema)" },
+            { id: 4, name: "Gerencia de Infraestructura" },
+            { id: 5, name: "Seguridad Digital" },
+            { id: 6, name: "Riesgos Informáticos" }
+        ];
+
+        const stages = [
+            { name: "Registro y Recepción", colStart: 2, colEnd: 4 },
+            { name: "Evaluación Paralela", colStart: 5, colEnd: 5 },
+            { name: "Decisión", colStart: 6, colEnd: 6 },
+            { name: "Ejecución Técnica", colStart: 7, colEnd: 8 },
+            { name: "Cierre y Documentación", colStart: 9, colEnd: 10 }
+        ];
+
+        // Definición de Nodos (Col = Tiempo/Etapa, Row = Carril)
+        const nodes = [
+            { id: "n1", row: 2, col: 2, type: "shape-event", title: "Necesidad", desc: "Se identifica necesidad operativa de gestionar un dominio." },
+            { id: "n2", row: 2, col: 3, type: "shape-task", title: "Registrar Ticket", desc: "Generación de solicitud con justificación y declaración de seguridad." },
+            { id: "n3", row: 3, col: 4, type: "shape-task", title: "Notificar Áreas", desc: "Mesa de ayuda distribuye el ticket a las gerencias involucradas." },
+            { id: "n4", row: 4, col: 5, type: "shape-task", title: "Evaluar Viabilidad", desc: "Infraestructura analiza el impacto técnico en plataformas." },
+            { id: "n5", row: 5, col: 5, type: "shape-task", title: "Análisis Seguridad", desc: "Se descartan riesgos de phishing, fraude o BEC." },
+            { id: "n6", row: 6, col: 5, type: "shape-task", title: "Validar Apetito", desc: "Riesgos valida alineación con normativas de TI." },
+            { id: "n7", row: 4, col: 6, type: "shape-gateway", title: "¿Aprobado?", desc: "Si todas las áreas aprueban, el flujo avanza." },
+            { id: "n8", row: 4, col: 7, type: "shape-task", title: "Configurar Plataforma", desc: "Configuración técnica en servidores de correo." },
+            { id: "n9", row: 3, col: 8, type: "shape-task", title: "Actualizar Whitelist", desc: "Aplicación efectiva de la lista permitida en sistema." },
+            { id: "n10", row: 4, col: 9, type: "shape-task", title: "Documentar Cierre", desc: "Se deja evidencia de la implementación en el ticket." },
+            { id: "n11", row: 4, col: 10, type: "shape-event end", title: "Fin", desc: "Proceso completado exitosamente." }
+        ];
+
+        // Secuencia lógica de avance (puede contener múltiples nodos en paralelo)
+        const flowSequence = [
+            { nodes: ["n1"], paths: [], desc: "Inicio del Flujo" },
+            { nodes: ["n2"], paths: ["n1-n2"], desc: "Registro de Solicitud" },
+            { nodes: ["n3"], paths: ["n2-n3"], desc: "Distribución de Ticket" },
+            { nodes: ["n4", "n5", "n6"], paths: ["n3-n4", "n3-n5", "n3-n6"], desc: "Evaluación Paralela" },
+            { nodes: ["n7"], paths: ["n4-n7", "n5-n7", "n6-n7"], desc: "Toma de Decisión" },
+            { nodes: ["n8"], paths: ["n7-n8"], desc: "Ejecución Técnica" },
+            { nodes: ["n9"], paths: ["n8-n9"], desc: "Actualización de Sistema" },
+            { nodes: ["n10"], paths: ["n9-n10"], desc: "Documentación" },
+            { nodes: ["n11"], paths: ["n10-n11"], desc: "Proceso Completado" }
+        ];
+
+        const container = document.getElementById('diagram-container');
+        const svgLayer = document.getElementById('svg-layer');
+        let currentStep = 0;
+
+        function buildDiagram() {
+            // Construir Cabeceras de Fases (Milestones)
+            stages.forEach(stage => {
+                const el = document.createElement('div');
+                el.className = 'stage-header';
+                el.style.gridColumn = `${stage.colStart} / ${stage.colEnd + 1}`;
+                el.innerText = stage.name;
+                container.appendChild(el);
+            });
+
+            // Construir Fondos y Títulos de Carriles
+            lanes.forEach(lane => {
+                // Fondo
+                const bg = document.createElement('div');
+                bg.className = 'lane-bg';
+                bg.style.gridRow = lane.id;
+                container.appendChild(bg);
+                
+                // Título
+                const title = document.createElement('div');
+                title.className = 'lane-title';
+                title.style.gridRow = lane.id;
+                title.innerText = lane.name;
+                container.appendChild(title);
+            });
+
+            // Construir Nodos
+            nodes.forEach(n => {
+                const node = document.createElement('div');
+                node.className = `bpmn-node ${n.type}`;
+                node.id = n.id;
+                node.style.gridRow = n.row;
+                node.style.gridColumn = n.col;
+                node.onclick = () => openModal(n);
+
+                if(n.type === 'shape-gateway') {
+                    node.innerHTML = `<span>${n.title}</span>`;
+                } else if(n.type === 'shape-event') {
+                    node.title = n.title; // Tooltip simple
+                } else {
+                    node.innerHTML = `<span>${n.title}</span>`;
+                }
+                
+                container.appendChild(node);
+            });
+        }
+
+        // Dibuja conectores ortogonales (estilo BPMN) entre elementos
+        function drawConnectors() {
+            // Limpiar paths existentes
+            svgLayer.innerHTML = document.querySelector('defs').outerHTML;
+
+            const drawPath = (fromId, toId) => {
+                const from = document.getElementById(fromId);
+                const to = document.getElementById(toId);
+                if(!from || !to) return;
+
+                const fRect = from.getBoundingClientRect();
+                const tRect = to.getBoundingClientRect();
+                const cRect = container.getBoundingClientRect();
+
+                // Coordenadas relativas al contenedor
+                const fX = fRect.right - cRect.left;
+                const fY = fRect.top + (fRect.height / 2) - cRect.top;
+                const tX = tRect.left - cRect.left;
+                const tY = tRect.top + (tRect.height / 2) - cRect.top;
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('class', 'connector');
+                path.setAttribute('id', `path-${fromId}-${toId}`);
+                path.setAttribute('marker-end', 'url(#arrow)');
+
+                // Dibujar línea ortogonal (codo)
+                const midX = fX + 25; 
+                path.setAttribute('d', `M ${fX} ${fY} L ${midX} ${fY} L ${midX} ${tY} L ${tX - 3} ${tY}`);
+                
+                svgLayer.appendChild(path);
+            };
+
+            // Recorrer las secuencias para dibujar todas las líneas posibles
+            flowSequence.forEach(step => {
+                step.paths.forEach(p => {
+                    const [from, to] = p.split('-');
+                    drawPath(from, to);
+                });
+            });
+        }
+
+        function updateFlowState() {
+            // Reiniciar todos
+            nodes.forEach(n => document.getElementById(n.id).classList.remove('active', 'completed'));
+            document.querySelectorAll('path.connector').forEach(p => {
+                p.classList.remove('active');
+                p.setAttribute('marker-end', 'url(#arrow)');
+            });
+
+            let activeNodes = [];
+
+            // Marcar históricos y activos
+            for (let i = 0; i <= currentStep; i++) {
+                const isCurrent = (i === currentStep);
+                
+                flowSequence[i].nodes.forEach(nId => {
+                    const el = document.getElementById(nId);
+                    el.classList.add(isCurrent ? 'active' : 'completed');
+                    if(isCurrent) activeNodes.push(el);
+                });
+
+                flowSequence[i].paths.forEach(pId => {
+                    const path = document.getElementById(`path-${pId}`);
+                    if (path) {
+                        if (isCurrent) {
+                            path.classList.add('active');
+                            path.setAttribute('marker-end', 'url(#arrow-active)');
+                        } else {
+                            path.style.stroke = '#94a3b8'; // Mantener gris si ya pasó
+                        }
+                    }
+                });
+            }
+
+            // Textos y botones
+            document.getElementById('progress-text').innerText = flowSequence[currentStep].desc;
+            document.getElementById('btn-prev').disabled = currentStep === 0;
+            document.getElementById('btn-next').disabled = currentStep === flowSequence.length - 1;
+
+            // Scroll suave hacia el nodo activo
+            if (activeNodes.length > 0) {
+                const wrapper = document.getElementById('diagram-wrapper');
+                const offset = activeNodes[0].offsetLeft - (window.innerWidth / 2) + 200;
+                wrapper.scrollTo({ left: Math.max(0, offset), behavior: 'smooth' });
+            }
+        }
+
+        // Navegación
+        document.getElementById('btn-next').onclick = () => { if(currentStep < flowSequence.length - 1) { currentStep++; updateFlowState(); } };
+        document.getElementById('btn-prev').onclick = () => { if(currentStep > 0) { currentStep--; updateFlowState(); } };
+        document.getElementById('btn-reset').onclick = () => { 
+            currentStep = 0; 
+            updateFlowState(); 
+            document.getElementById('diagram-wrapper').scrollTo({ left: 0, behavior: 'smooth' });
+        };
+
+        // Modal Modal
+        const modal = document.getElementById('modal');
+        function openModal(nodeData) {
+            const laneObj = lanes.find(l => l.id === nodeData.row);
+            const stageObj = stages.find(s => nodeData.col >= s.colStart && nodeData.col <= s.colEnd);
+            
+            document.getElementById('modal-title').innerText = nodeData.title;
+            document.getElementById('modal-lane').innerText = laneObj ? laneObj.name : 'N/A';
+            document.getElementById('modal-stage').innerText = stageObj ? stageObj.name : 'N/A';
+            document.getElementById('modal-body').innerText = nodeData.desc;
+            
+            modal.classList.add('active');
+        }
+        function closeModal() { modal.classList.remove('active'); }
+        modal.onclick = (e) => { if(e.target === modal) closeModal(); }
+
+        // Inicialización y re-dibujado al redimensionar la ventana
+        window.onload = () => {
+            buildDiagram();
+            setTimeout(() => { drawConnectors(); updateFlowState(); }, 100);
+        };
+        
+        window.onresize = () => {
+            drawConnectors();
+            updateFlowState();
+        };
+    </script>
+</body>
+</html>
